@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>奶蛙打靶反應力訓練</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            background: #090d16;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        /* 類似 YouTube 影音視窗的外殼 */
+        #player-wrapper {
+            position: relative;
+            width: 90vw;
+            max-width: 980px;
+            aspect-ratio: 16 / 9;
+            background: #111827;
+            border-radius: 20px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.12);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            cursor: none;
+            transition: all 0.3s ease;
+        }
+
+        #player-wrapper.fullscreen {
+            width: 100vw !important;
+            height: 100vh !important;
+            max-width: none !important;
+            aspect-ratio: auto !important;
+            border-radius: 0 !important;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI 頂部控制面板 (畫面中間絕無任何UI) */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 16px 20px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+        .ui-left, .ui-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .score-box, .timer-box, .rank-display-box {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 8px 16px;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 15px;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .score-box span {
+            color: #4ade80;
+            font-size: 22px;
+        }
+        .timer-box span {
+            color: #f6e05e;
+            font-size: 22px;
+        }
+        .rank-display-box {
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+
+        /* 頂部控制按鈕 */
+        .btn-ui {
+            pointer-events: auto;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            backdrop-filter: blur(12px);
+        }
+        .btn-ui:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+        .btn-ui:active {
+            transform: translateY(0);
+        }
+        .btn-restart-top {
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            border: none;
+            color: white;
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+        }
+
+        /* 評分級距說明頂部側邊彈窗 */
+        .modal-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 20px 30px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            max-width: 420px;
+            width: 88%;
+        }
+
+        .rank-info-list {
+            text-align: left;
+            margin: 15px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 14px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+        .rank-info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border-left: 4px solid #fff;
+        }
+
+        .btn-action {
+            pointer-events: auto;
+            background: #334155;
+            border: none;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            padding: 8px 24px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-action:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 類似 YouTube 影音視窗外殼 -->
+    <div id="player-wrapper">
+        <div id="game-container">
+            <canvas id="gameCanvas"></canvas>
+            
+            <!-- 頂部控制列 (畫面中間完全透明，絕無任何點擊攔截) -->
+            <div class="ui-layer">
+                <div class="header">
+                    <div class="ui-left">
+                        <div class="score-box">得分: <span id="scoreText">0</span></div>
+                        <div class="rank-display-box" id="rankBox" style="display: none;">
+                            評分: <span id="rankText" style="font-size: 18px; font-weight: 900;">-</span>
+                        </div>
+                        <button class="btn-ui" id="rankInfoBtn">📜 評分說明</button>
+                    </div>
+                    <div class="ui-right">
+                        <div class="timer-box">時間: <span id="timeText">60</span>s</div>
+                        <button class="btn-ui" id="pauseBtn">⏸️ 暫停</button>
+                        <button class="btn-ui btn-restart-top" id="topRestartBtn">🔄 重新開始</button>
+                        <button class="btn-ui" id="fullscreenBtn">⤢ 全螢幕</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 僅有的評分說明側彈窗 (預設關閉且無任何重來按鈕) -->
+            <div class="modal-overlay" id="rankModal">
+                <div class="modal-card">
+                    <div style="font-size: 20px; color: #f6e05e; font-weight: bold;">🏆 分數級距說明</div>
+                    <div class="rank-info-list">
+                        <div class="rank-info-item" style="border-color: #f59e0b;">
+                            <span>👑 <b>SSS 級</b> (≥ 800 分)</span>
+                            <span>神速打靶大師</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #ec4899;">
+                            <span>🔥 <b>SS 級</b> (600 ~ 799 分)</span>
+                            <span>極速反應專家</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #f6e05e;">
+                            <span>🎯 <b>S 級</b> (400 ~ 599 分)</span>
+                            <span>頂尖快槍手</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #a855f7;">
+                            <span>⚡ <b>A 級</b> (250 ~ 399 分)</span>
+                            <span>精銳神射手</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #3b82f6;">
+                            <span>🏹 <b>B 級</b> (150 ~ 249 分)</span>
+                            <span>熟練射手</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #22c55e;">
+                            <span>🌱 <b>C 級</b> (80 ~ 149 分)</span>
+                            <span>新手實習生</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #94a3b8;">
+                            <span>💤 <b>D 級</b> (30 ~ 79 分)</span>
+                            <span>需要多加練習</span>
+                        </div>
+                        <div class="rank-info-item" style="border-color: #ef4444;">
+                            <span>🐲 <b>F 級</b> (< 30 分)</span>
+                            <span>奶龍好朋友</span>
+                        </div>
+                    </div>
+                    <button class="btn-action" id="closeRankBtn">關閉</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Web Audio 音效
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playGunshot() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                
+                const bufferSize = this.ctx.sampleRate * 0.08;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1200, now);
+                filter.frequency.exponentialRampToValueAtTime(100, now + 0.08);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                noise.start(now);
+            }
+            playFrogHit() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
+
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.1);
+            }
+            playDragonHit() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, now);
+                osc.frequency.linearRampToValueAtTime(70, now + 0.2);
+
+                gain.gain.setValueAtTime(0.35, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+            playDragonVanish() {
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(350, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.12);
+            }
+        }
+
+        const sound = new SoundFX();
+
+        const playerWrapper = document.getElementById('player-wrapper');
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreText = document.getElementById('scoreText');
+        const timeText = document.getElementById('timeText');
+        const rankBox = document.getElementById('rankBox');
+        const rankText = document.getElementById('rankText');
+
+        const rankModal = document.getElementById('rankModal');
+        const rankInfoBtn = document.getElementById('rankInfoBtn');
+        const closeRankBtn = document.getElementById('closeRankBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const topRestartBtn = document.getElementById('topRestartBtn');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+
+        let width, height;
+        function resize() {
+            width = canvas.width = playerWrapper.clientWidth;
+            height = canvas.height = playerWrapper.clientHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 遊戲狀態 (中間絕無任何 UI)
+        let gameActive = false;
+        let isPaused = false;
+        let score = 0;
+        let timeLeft = 60;
+        let hitFrogCount = 0;
+        let hitDragonCount = 0;
+        let mousePos = { x: -100, y: -100 };
+        let isMouseInCanvas = false;
+        let targets = [];
+        let particles = [];
+        let floatTexts = [];
+        let lastTargetId = 0;
+        let timerInterval = null;
+
+        const TARGET_RADIUS = 42;
+
+        // 繪製奶蛙
+        function drawNaiWa(ctx, x, y, radius) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.fillStyle = '#f6e05e';
+            ctx.beginPath();
+            ctx.ellipse(0, radius * 0.3, radius * 0.7, radius * 0.65, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(0, -radius * 0.35, radius * 0.45, radius * 0.45, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(-radius * 0.42, -radius * 0.3);
+            ctx.quadraticCurveTo(-radius * 0.55, 0, -radius * 0.68, radius * 0.2);
+            ctx.lineTo(radius * 0.68, radius * 0.2);
+            ctx.quadraticCurveTo(radius * 0.55, 0, radius * 0.42, -radius * 0.3);
+            ctx.fill();
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.ellipse(0, radius * 0.32, radius * 0.5, radius * 0.48, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            const eyeOffsetX = radius * 0.18;
+            const eyeOffsetY = -radius * 0.55;
+            const eyeR = radius * 0.14;
+
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX, eyeOffsetY, eyeR, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX, eyeOffsetY, eyeR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX + radius * 0.02, eyeOffsetY, eyeR * 0.6, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX + radius * 0.02, eyeOffsetY, eyeR * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX - radius * 0.02, eyeOffsetY - radius * 0.03, eyeR * 0.2, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX - radius * 0.02, eyeOffsetY - radius * 0.03, eyeR * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#854d0e';
+            ctx.lineWidth = Math.max(1.5, radius * 0.03);
+            ctx.beginPath();
+            ctx.arc(0, -radius * 0.25, radius * 0.1, 0.1 * Math.PI, 0.9 * Math.PI);
+            ctx.stroke();
+
+            ctx.fillStyle = '#78350f';
+            ctx.beginPath();
+            ctx.ellipse(-radius * 0.2, radius * 0.35, radius * 0.15, radius * 0.08, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(radius * 0.2, radius * 0.35, radius * 0.15, radius * 0.08, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#f6e05e';
+            ctx.beginPath();
+            ctx.ellipse(-radius * 0.3, radius * 0.88, radius * 0.12, radius * 0.07, 0, 0, Math.PI * 2);
+            ctx.ellipse(radius * 0.3, radius * 0.88, radius * 0.12, radius * 0.07, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        // 繪製奶龍
+        function drawNaiLong(ctx, x, y, radius) {
+            ctx.save();
+            ctx.translate(x, y);
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.ellipse(0, radius * 0.25, radius * 0.6, radius * 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(0, -radius * 0.25, radius * 0.52, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.ellipse(0, radius * 0.3, radius * 0.4, radius * 0.42, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fbbf24';
+            ctx.beginPath();
+            ctx.moveTo(-radius * 0.45, radius * 0.4);
+            ctx.quadraticCurveTo(-radius * 0.8, radius * 0.5, -radius * 0.65, radius * 0.2);
+            ctx.quadraticCurveTo(-radius * 0.4, radius * 0.2, -radius * 0.35, radius * 0.3);
+            ctx.fill();
+
+            const eyeOffsetX = radius * 0.22;
+            const eyeOffsetY = -radius * 0.35;
+            const eyeR = radius * 0.14;
+
+            ctx.fillStyle = '#15803d';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX, eyeOffsetY, eyeR, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX, eyeOffsetY, eyeR, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX, eyeOffsetY, eyeR * 0.65, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX, eyeOffsetY, eyeR * 0.65, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(-eyeOffsetX - radius * 0.03, eyeOffsetY - radius * 0.03, eyeR * 0.25, 0, Math.PI * 2);
+            ctx.arc(eyeOffsetX - radius * 0.03, eyeOffsetY - radius * 0.03, eyeR * 0.25, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(0, -radius * 0.12, radius * 0.2, 0, Math.PI);
+            ctx.fill();
+
+            ctx.fillStyle = '#f59e0b';
+            ctx.beginPath();
+            ctx.ellipse(-radius * 0.45, -radius * 0.05, radius * 0.12, radius * 0.18, 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(radius * 0.45, -radius * 0.05, radius * 0.12, radius * 0.18, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#f43f5e';
+            ctx.beginPath();
+            ctx.arc(-radius * 0.45, -radius * 0.05, radius * 0.06, 0, Math.PI * 2);
+            ctx.arc(radius * 0.45, -radius * 0.05, radius * 0.06, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        class Target {
+            constructor(type) {
+                this.id = ++lastTargetId;
+                this.type = type;
+                this.radius = TARGET_RADIUS;
+                this.padding = this.radius + 15;
+
+                this.x = Math.random() * (width - this.padding * 2) + this.padding;
+                this.y = Math.random() * (height - this.padding * 2) + this.padding;
+
+                this.scale = 0;
+                this.targetScale = 1;
+
+                if (this.type === 'dragon') {
+                    this.lifespan = 2000;
+                    this.spawnTime = Date.now();
+                    this.isVanishing = false;
+                    this.vx = (Math.random() - 0.5) * 2;
+                    this.vy = (Math.random() - 0.5) * 2;
+                } else {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 4.5 + 1.5; 
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                }
+            }
+
+            update(now) {
+                if (isPaused) return true;
+
+                if (this.scale < this.targetScale && !this.isVanishing) {
+                    this.scale += (this.targetScale - this.scale) * 0.2;
+                }
+
+                if (this.type === 'dragon' && !this.isVanishing) {
+                    if (now - this.spawnTime > this.lifespan) {
+                        this.isVanishing = true;
+                        sound.playDragonVanish();
+                    }
+                }
+
+                if (this.isVanishing) {
+                    this.scale -= 0.15;
+                    if (this.scale <= 0) return false; 
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x - this.radius < 5) {
+                    this.x = 5 + this.radius;
+                    this.vx *= -1;
+                } else if (this.x + this.radius > width - 5) {
+                    this.x = width - 5 - this.radius;
+                    this.vx *= -1;
+                }
+
+                if (this.y - this.radius < 55) {
+                    this.y = 55 + this.radius;
+                    this.vy *= -1;
+                } else if (this.y + this.radius > height - 5) {
+                    this.y = height - 5 - this.radius;
+                    this.vy *= -1;
+                }
+
+                return true;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.scale, this.scale);
+                ctx.translate(-this.x, -this.y);
+
+                if (this.type === 'frog') {
+                    drawNaiWa(ctx, this.x, this.y, this.radius);
+                } else {
+                    drawNaiLong(ctx, this.x, this.y, this.radius);
+                }
+
+                ctx.restore();
+            }
+
+            isHit(px, py) {
+                const dist = Math.hypot(this.x - px, this.y - py);
+                return dist <= this.radius;
+            }
+        }
+
+        function createParticles(x, y, color) {
+            for (let i = 0; i < 12; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 6 + 2;
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: Math.random() * 4 + 2,
+                    color: color,
+                    alpha: 1
+                });
+            }
+        }
+
+        function createFloatingText(x, y, text, color) {
+            floatTexts.push({
+                x: x,
+                y: y,
+                text: text,
+                color: color,
+                alpha: 1,
+                vy: -2
+            });
+        }
+
+        function maintainTargets() {
+            if (!gameActive || isPaused) return;
+
+            const currentFrogs = targets.filter(t => t.type === 'frog').length;
+            const currentDragons = targets.filter(t => t.type === 'dragon').length;
+
+            if (currentFrogs < 3) targets.push(new Target('frog'));
+            if (currentDragons < 2) targets.push(new Target('dragon'));
+        }
+
+        function shoot(x, y) {
+            if (!gameActive || isPaused) return;
+
+            sound.init();
+            sound.playGunshot();
+
+            for (let i = targets.length - 1; i >= 0; i--) {
+                const t = targets[i];
+                if (t.isHit(x, y)) {
+                    if (t.type === 'frog') {
+                        score += 10;
+                        hitFrogCount++;
+                        sound.playFrogHit();
+                        createParticles(t.x, t.y, '#4ade80');
+                        createFloatingText(t.x, t.y - 20, '+10', '#4ade80');
+                    } else {
+                        score = Math.max(0, score - 15);
+                        hitDragonCount++;
+                        sound.playDragonHit();
+                        createParticles(t.x, t.y, '#ef4444');
+                        createFloatingText(t.x, t.y - 20, '-15', '#ef4444');
+                    }
+
+                    targets.splice(i, 1);
+                    break;
+                }
+            }
+
+            scoreText.textContent = score;
+            maintainTargets();
+        }
+
+        function updateMousePos(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            mousePos.x = clientX - rect.left;
+            mousePos.y = clientY - rect.top;
+            isMouseInCanvas = true;
+        }
+
+        canvas.addEventListener('mousemove', (e) => updateMousePos(e.clientX, e.clientY));
+        canvas.addEventListener('mouseleave', () => { isMouseInCanvas = false; });
+        canvas.addEventListener('mousedown', (e) => {
+            updateMousePos(e.clientX, e.clientY);
+            shoot(mousePos.x, mousePos.y);
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                updateMousePos(touch.clientX, touch.clientY);
+                shoot(mousePos.x, mousePos.y);
+            }
+        }, { passive: true });
+
+        // 按鈕監聽
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                if (playerWrapper.requestFullscreen) playerWrapper.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                playerWrapper.classList.add('fullscreen');
+                fullscreenBtn.textContent = '⤡ 視窗化';
+            } else {
+                playerWrapper.classList.remove('fullscreen');
+                fullscreenBtn.textContent = '⤢ 全螢幕';
+            }
+            setTimeout(resize, 100);
+        });
+
+        rankInfoBtn.addEventListener('click', () => {
+            rankModal.classList.add('active');
+        });
+        closeRankBtn.addEventListener('click', () => {
+            rankModal.classList.remove('active');
+        });
+
+        pauseBtn.addEventListener('click', () => {
+            if (!gameActive) return;
+            isPaused = !isPaused;
+            pauseBtn.textContent = isPaused ? '▶️ 繼續' : '⏸️ 暫停';
+        });
+
+        // 頂部唯一重開按鈕
+        topRestartBtn.addEventListener('click', () => {
+            resetGame();
+        });
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (!gameActive || isPaused) return;
+                timeLeft--;
+                timeText.textContent = timeLeft;
+
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function calculateRank(score) {
+            if (score >= 800) return { rank: 'SSS', title: '👑 SSS神速', color: '#f59e0b' };
+            if (score >= 600) return { rank: 'SS', title: '🔥 SS極速', color: '#ec4899' };
+            if (score >= 400) return { rank: 'S', title: '🎯 S級頂尖', color: '#f6e05e' };
+            if (score >= 250) return { rank: 'A', title: '⚡ A級精銳', color: '#a855f7' };
+            if (score >= 150) return { rank: 'B', title: '🏹 B級熟練', color: '#3b82f6' };
+            if (score >= 80) return { rank: 'C', title: '🌱 C級新手', color: '#22c55e' };
+            if (score >= 30) return { rank: 'D', title: '💤 D級練習', color: '#94a3b8' };
+            return { rank: 'F', title: '🐲 F級奶龍', color: '#ef4444' };
+        }
+
+        function endGame() {
+            gameActive = false;
+            isPaused = false;
+            if (timerInterval) clearInterval(timerInterval);
+
+            const rankInfo = calculateRank(score);
+            
+            // 60秒時間到了直接在頂部欄顯示評分，畫面上完全無彈窗、無按鈕！
+            rankBox.style.display = 'flex';
+            rankText.textContent = `${rankInfo.rank} (${rankInfo.title})`;
+            rankText.style.color = rankInfo.color;
+        }
+
+        function resetGame() {
+            score = 0;
+            timeLeft = 60;
+            hitFrogCount = 0;
+            hitDragonCount = 0;
+            gameActive = true;
+            isPaused = false;
+            targets = [];
+            particles = [];
+            floatTexts = [];
+            scoreText.textContent = '0';
+            timeText.textContent = '60';
+            pauseBtn.textContent = '⏸️ 暫停';
+
+            rankBox.style.display = 'none';
+
+            maintainTargets();
+            startTimer();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, width, height);
+            const now = Date.now();
+
+            maintainTargets();
+
+            targets = targets.filter(t => {
+                const alive = t.update(now);
+                if (!alive && t.type === 'dragon' && !isPaused) {
+                    setTimeout(() => maintainTargets(), 100);
+                }
+                if (alive) t.draw(ctx);
+                return alive;
+            });
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                if (!isPaused) {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.alpha -= 0.03;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, p.alpha);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = floatTexts.length - 1; i >= 0; i--) {
+                const ft = floatTexts[i];
+                if (!isPaused) {
+                    ft.y += ft.vy;
+                    ft.alpha -= 0.02;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, ft.alpha);
+                ctx.fillStyle = ft.color;
+                ctx.font = 'bold 24px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.restore();
+
+                if (ft.alpha <= 0) floatTexts.splice(i, 1);
+            }
+
+            if (isMouseInCanvas && !isPaused) {
+                ctx.save();
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+
+                ctx.beginPath();
+                ctx.arc(mousePos.x, mousePos.y, 14, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(mousePos.x, mousePos.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(mousePos.x - 20, mousePos.y);
+                ctx.lineTo(mousePos.x - 6, mousePos.y);
+                ctx.moveTo(mousePos.x + 6, mousePos.y);
+                ctx.lineTo(mousePos.x + 20, mousePos.y);
+                ctx.moveTo(mousePos.x, mousePos.y - 20);
+                ctx.lineTo(mousePos.x, mousePos.y - 6);
+                ctx.moveTo(mousePos.x, mousePos.y + 6);
+                ctx.lineTo(mousePos.x, mousePos.y + 20);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        resetGame();
+        render();
+    </script>
+</body>
+</html>
